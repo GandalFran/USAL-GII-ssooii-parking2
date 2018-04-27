@@ -101,7 +101,7 @@ int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
 int SiguienteAjuste(HCoche c);
 
-void SemOp(HANDLE Object, int TypeOp);
+void MutexOp(HANDLE Object, int TypeOp);
 
 
 
@@ -201,7 +201,7 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 
 	if (CocheAnterior != 0) {
 		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
-		SemOp(*DatosAnterior->MutexOrden,WAIT);
+		MutexOp(*DatosAnterior->MutexOrden,WAIT);
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
@@ -230,10 +230,10 @@ void PermisoAvance(HCoche hc) {
 	PCARRETERA CarrAlg = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) > 0) {
-		//SemOp(Carretera[Funciones.GetX2(hc)], WAIT);
+		//MutexOp(Carretera[Funciones.GetX2(hc)], WAIT);
 	}else if (ESTA_DESAPARCANDO_AVANCE(hc)){
 		for (int i = Funciones.GetX(hc) + Funciones.GetLongitud(hc) - 1; i >= Funciones.GetX(hc); i--) {
-			//SemOp(Carretera[i],WAIT);
+			//MutexOp(Carretera[i],WAIT);
 		}
 	}else{
 		return;
@@ -244,13 +244,13 @@ void PermisoAvanceCommit(HCoche hc) {
 	PCARRETERA CarrAlg = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) + Funciones.GetLongitud(hc) < MAX_LONG_ROAD){
-		//SemOp(Carretera[Funciones.GetX(hc) + Funciones.GetLongitud(hc)],SIGNAL);
+		//MutexOp(Carretera[Funciones.GetX(hc) + Funciones.GetLongitud(hc)],SIGNAL);
 	}else if (ESTA_DESAPARCANDO_COMMIT(hc)){
 		PACERA AceraAlg = Acera[Funciones.GetAlgoritmo(hc)];
 		memset(AceraAlg + Funciones.GetX(hc), FALSE, sizeof(ACERA)*Funciones.GetLongitud(hc));
 	}else if (ESTA_APARCANDO_COMMIT(hc)){
 		for (int i = Funciones.GetX(hc); i < Funciones.GetX(hc) + Funciones.GetLongitud(hc); i++) {
-			//SemOp(Carretera[i],SIGNAL);
+			//MutexOp(Carretera[i],SIGNAL);
 		}
 	}
 }
@@ -392,7 +392,7 @@ int PeorAjuste(HCoche hc){
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
-void SemOp(HANDLE Object, int TypeOp) {
+void MutexOp(HANDLE Object, int TypeOp) {
 
 	switch (TypeOp) {
 		case WAIT: 
