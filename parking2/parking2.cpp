@@ -11,9 +11,33 @@
 #include "parking2.h"
 
 #define USAGE_ERROR_MSG "Usage: parking.exe <velocidad> [D]"
+#define DLL_LOAD_ERROR "ERROR: DLL no pudo ser cagada."
+#define FUNCTION_LOAD_ERROR "ERROR: una funcion no pudo ser cargada de DLL"
+
 #define MAX_LONG_ROAD 80
 
+#define NUMERO 0
+#define LONGITUD 1
+#define ALGORITMO 2
+#define X 3
+#define X2 4
+#define Y 5
+#define Y2 6
+
+
+
+#define EXIT_IF_NULL(returnValue,errorMsg)      \
+    do{                                         \
+        if((returnValue) == NULL){              \
+            fprintf(stderr,"\n%s",errorMsg);    \
+            exit(-1);							\
+        }                                       \
+    }while(0)
+
+
+
 typedef int(*PARKING_Inicio)(TIPO_FUNCION_LLEGADA *, TIPO_FUNCION_SALIDA *, long, int);
+typedef int(*PARKING_Fin)(void);
 typedef int(*PARKING_Aparcar)(HCoche, void *datos, TIPO_FUNCION_APARCAR_COMMIT,
 												   TIPO_FUNCION_PERMISO_AVANCE,
 												   TIPO_FUNCION_PERMISO_AVANCE_COMMIT);
@@ -31,100 +55,110 @@ typedef struct _DatosCoche {
 	PHANDLE MutexOrden;
 } DATOSCOCHE, *PDATOSCOCHE;
 
-HMODULE WINAPI ParkingLibrary;
+
 HCoche SiguienteCoche[4] = { 0, 0, 0, 0 };
+
 PCARRETERA Carretera[4];
 PBOOL Acera[4];
-PARKING_Get FuncionesGet[8];
-PARKING_Aparcar FuncionAparcar;
-PARKING_Inicio FuncionInicio;
-PARKING_GetDatos FuncionGetDatos;
 
-void AparcarCommit(HCoche hc) {
-	PARKING_Get GetAlgoritmo = (PARKING_Get)GetProcAddress(ParkingLibrary, "PARKING2_getAlgoritmo");
-	if (GetAlgoritmo == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		exit(1);
-	}
-	PARKING_GetDatos GetDatos = (PARKING_GetDatos)GetProcAddress(ParkingLibrary, "PARKING2_getDatos");
-	if (GetDatos == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		exit(1);
-	}
+struct _Funciones{
+	HMODULE WINAPI ParkingLibrary;
+	PARKING_Get Get[7];
+	PARKING_GetDatos GetDatos;
+	PARKING_Aparcar Aparcar;
+	PARKING_Desaparcar Desaparcar;
+	PARKING_Inicio Inicio;
+	PARKING_Fin Fin;
+}Funciones;
 
-	SiguienteCoche[GetAlgoritmo(hc)] = hc;
-	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)GetDatos(hc);
-	ReleaseMutex(*DatosCoche->MutexOrden);
-	fprintf(stderr, "[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
-}
-void PermisoAvance(HCoche hc) {}
-void PermisoAvanceCommit(HCoche hc) {}
 
-DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
+void InitFunctions();
+void AparcarCommit(HCoche hc);
+void PermisoAvance(HCoche hc);
+void PermisoAvanceCommit(HCoche hc);
 
-	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
+int PrimerAjuste(HCoche c);
+int MejorAjuste(HCoche c);
+int PeorAjuste(HCoche c);
+int SiguienteAjuste(HCoche c);
 
-	PARKING_Get GetNumero = (PARKING_Get)GetProcAddress(ParkingLibrary, "PARKING2_getNUmero");
-	if (GetNumero == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		return 1;
-	}
-	PARKING_Get GetAlgoritmo = (PARKING_Get)GetProcAddress(ParkingLibrary, "PARKING2_getAlgoritmo");
-	if (GetAlgoritmo == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		return 1;
-	}
+DWORD WINAPI ChoferRoutine(LPVOID lpParam);
+DWORD WINAPI DesaparcarRoutine(LPVOID lpParam);
+int Desaparcar(HCoche hc);
 
-	PARKING_GetDatos GetDatos = (PARKING_GetDatos)GetProcAddress(ParkingLibrary, "PARKING2_getDatos");
-	if (GetDatos == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
+
+
+
+
+int main(int argc, char** argv)
+{
+	long Velocidad;
+	BOOL Debug = FALSE;
+
+	if (argc > 3 || argc < 2) {
+		fprintf(stderr, USAGE_ERROR_MSG);
 		return 1;
 	}
 
-	HCoche CocheAnterior = SiguienteCoche[GetAlgoritmo(Datos->hc)];
-	if (CocheAnterior != 0) {
+	Velocidad = atol(argv[1]);
 
-		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)GetDatos(CocheAnterior);
+	if (argc == 3) {
+		Debug = strcmp(argv[2], "D") == 0 ? TRUE : FALSE;
+	}
 
-		fprintf(stderr, "[%d] Espero por el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
-		DWORD WINAPI Value = WaitForSingleObject(*DatosAnterior->MutexOrden, INFINITE);
-		if (Value == WAIT_FAILED) {
-			fprintf(stderr, "[%d]wait failed %d", __LINE__, GetLastError());
-			return 1;
+	InitFunctions();
+
+	for (int i = PRIMER_AJUSTE; i <= PEOR_AJUSTE; i++) {
+		Acera[i] = (PBOOL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BOOL) * MAX_LONG_ROAD);
+		Carretera[i] = (PCARRETERA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CARRETERA) * MAX_LONG_ROAD);
+		for (int j = 0; j < MAX_LONG_ROAD; j++) {
+			Carretera[i][j] = CreateMutex(NULL, FALSE, NULL);
 		}
-		fprintf(stderr, "[%d] He entrado en el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
 	}
 
-	PARKING_Aparcar Aparcar = (PARKING_Aparcar)GetProcAddress(ParkingLibrary, "PARKING2_aparcar");
-	if (Aparcar == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		return 1;
+	for (int i = 0; i < MAX_LONG_ROAD; i++) {
+		fprintf(stderr, "AceraAlg[%d] = %d\n", i, Acera[0][i]);
 	}
 
-	Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
+	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
+	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Desaparcar, Desaparcar, Desaparcar, Desaparcar };
+	
+	Funciones.Inicio(FuncionesLlegada, FuncionesSalida, Velocidad, Debug);
+
+	Sleep(30000);
 
 	return 0;
 }
+void InitFunctions(){
+	EXIT_IF_NULL(Funciones.ParkingLibrary = LoadLibrary(TEXT("parking2.dll")), DLL_LOAD_ERROR);
+	
+	EXIT_IF_NULL(Funciones.Get[NUMERO] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getNUmero"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Get[LONGITUD] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getLongitud"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Get[ALGORITMO] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getAlgoritmo"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Get[X] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getX"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Get[X2] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getX2"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Get[Y] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getY"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Get[Y2] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getY2"), FUNCTION_LOAD_ERROR);
 
-int PrimerAjuste(HCoche hc)
-{
-	PARKING_Get GetLongitud = (PARKING_Get)GetProcAddress(ParkingLibrary, "PARKING2_getLongitud");
-	if (GetLongitud == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d",__LINE__, GetLastError());
-		exit(1);
-	}
+	EXIT_IF_NULL(Funciones.GetDatos = (PARKING_GetDatos)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getDatos"), FUNCTION_LOAD_ERROR);
 
-	PARKING_Get GetAlgoritmo = (PARKING_Get)GetProcAddress(ParkingLibrary, "PARKING2_getAlgoritmo");
-	if (GetAlgoritmo == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		exit(1);
-	}
+	EXIT_IF_NULL(Funciones.Inicio = (PARKING_Inicio)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_inicio"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Fin = (PARKING_Fin)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_fin"), FUNCTION_LOAD_ERROR);
 
-	PBOOL AceraAlg = Acera[GetAlgoritmo(hc)];
+	EXIT_IF_NULL(Funciones.Aparcar = (PARKING_Aparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_aparcar"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_NULL(Funciones.Desaparcar = (PARKING_Desaparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_desaparcar"), FUNCTION_LOAD_ERROR);
+}
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+int PrimerAjuste(HCoche hc){
+
+
+	PBOOL AceraAlg = Acera[Funciones.Get[ALGORITMO](hc)];
 	int longitud;
 	int posInicial, longLibre, i = -1;
 
-	longitud = GetLongitud(hc);
+	longitud = Funciones.Get[LONGITUD](hc);
 	while (i < MAX_LONG_ROAD) {
 		i++;
 		longLibre = 0;
@@ -134,7 +168,7 @@ int PrimerAjuste(HCoche hc)
 			if (longLibre == longitud) {
 				posInicial = i - longitud;
 				memset(AceraAlg + posInicial, TRUE, sizeof(BOOL) * longitud);
-				
+
 				PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
 				*PMutexOrden = CreateMutex(NULL, TRUE, NULL);
 
@@ -148,7 +182,7 @@ int PrimerAjuste(HCoche hc)
 			}
 		}
 	}
-	
+
 	return -1;
 }
 
@@ -167,17 +201,42 @@ int PeorAjuste(HCoche hc)
 	return -2;
 }
 
+
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
+
+	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
+
+
+	HCoche CocheAnterior = SiguienteCoche[Funciones.Get[ALGORITMO](Datos->hc)];
+	if (CocheAnterior != 0) {
+
+		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
+
+		fprintf(stderr, "[%d] Espero por el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
+		DWORD WINAPI Value = WaitForSingleObject(*DatosAnterior->MutexOrden, INFINITE);
+		if (Value == WAIT_FAILED) {
+			fprintf(stderr, "[%d]wait failed %d", __LINE__, GetLastError());
+			return 1;
+		}
+		fprintf(stderr, "[%d] He entrado en el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
+	}
+
+
+	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
+
+	return 0;
+}
+
+
+
 DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 {
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
-	PARKING_Desaparcar Desaparcar = (PARKING_Desaparcar)GetProcAddress(ParkingLibrary, "PARKING2_desaparcar");
-	if (Desaparcar == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		return 1;
-	}	
-
-	Desaparcar(Datos->hc, Datos, PermisoAvance, PermisoAvanceCommit);
+	Funciones.Desaparcar(Datos->hc, Datos, PermisoAvance, PermisoAvanceCommit);
 	return 0;
 }
 
@@ -190,53 +249,16 @@ int Desaparcar(HCoche hc)
 	return 0;
 }
 
-int main(int argc, char** argv)
-{
-	long Velocidad;
-	BOOL Debug = FALSE;
 
-	if (argc > 3 || argc < 2) {
-		fprintf(stderr, USAGE_ERROR_MSG);
-		return 1;
-	}
 
-	Velocidad = atol(argv[1]);
+//-------------------------------------------------------------------------------------------------------------------------------------
+void AparcarCommit(HCoche hc) {
 
-	if (argc == 3) {
-		Debug = strcmp(argv[2], "D") == 0 ? TRUE : FALSE;
-	}
 
-	ParkingLibrary = LoadLibrary(TEXT("parking2.dll"));
-	if (ParkingLibrary == NULL) {
-		fprintf(stderr, "La biblioteca no se ha podido cargar correctamente. Abortando... %d", GetLastError());
-		return 1;
-	}
-
-	for (int i = PRIMER_AJUSTE; i <= PEOR_AJUSTE; i++) {
-		Acera[i] = (PBOOL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BOOL) * MAX_LONG_ROAD);
-		Carretera[i] = (PCARRETERA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CARRETERA) * MAX_LONG_ROAD);
-		for (int j = 0; j < MAX_LONG_ROAD; j++) {
-			Carretera[i][j] = CreateMutex(NULL, FALSE, NULL);
-		}
-	}
-
-	for (int i = 0; i < MAX_LONG_ROAD; i++) {
-		fprintf(stderr, "AceraAlg[%d] = %d\n", i, Acera[0][i]);
-	}
-
-	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
-	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Desaparcar, Desaparcar, Desaparcar, Desaparcar };
-
-	PARKING_Inicio init = (PARKING_Inicio)GetProcAddress(ParkingLibrary, "PARKING2_inicio");
-	if (init == NULL) {
-		fprintf(stderr, "[%d]No se ha cargado la funcion correctamente. Abortando... %d", __LINE__, GetLastError());
-		return 1;
-	}
-	
-	init(FuncionesLlegada, FuncionesSalida, Velocidad, Debug);
-
-	Sleep(30000);
-
-	return 0;
+	SiguienteCoche[Funciones.Get[ALGORITMO](hc)] = hc;
+	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
+	ReleaseMutex(*DatosCoche->MutexOrden);
+	fprintf(stderr, "[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
 }
-
+void PermisoAvance(HCoche hc) {}
+void PermisoAvanceCommit(HCoche hc) {}
