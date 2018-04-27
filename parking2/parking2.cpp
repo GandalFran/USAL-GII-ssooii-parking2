@@ -11,8 +11,8 @@
 #include "parking2.h"
 
 #define USAGE_ERROR_MSG "Usage: parking.exe <velocidad> [D]"
-#define DLL_LOAD_ERROR "ERROR: DLL no pudo ser cagada."
-#define FUNCTION_LOAD_ERROR "ERROR: una funcion no pudo ser cargada de DLL"
+#define DLL_LOAD_ERROR "DLL couldn't be loaded."
+#define FUNCTION_LOAD_ERROR "function couldn't be loaded."
 
 #define MAX_LONG_ROAD 80
 
@@ -24,12 +24,12 @@
 #define Y 5
 #define Y2 6
 
-
+#define PRINT_ERROR(string)	fprintf(stderr, "\n[%d:%s] ERROR: %s", __LINE__, __FUNCTION__,string);	
 
 #define EXIT_IF_NULL(returnValue,errorMsg)      \
     do{                                         \
         if((returnValue) == NULL){              \
-            fprintf(stderr,"\n%s",errorMsg);    \
+            PRINT_ERROR(errorMsg);				\
             exit(-1);							\
         }                                       \
     }while(0)
@@ -73,6 +73,12 @@ struct _Funciones{
 
 
 void InitFunctions();
+
+int Aparcar(HCoche hc);
+int Desaparcar(HCoche hc);
+DWORD WINAPI ChoferRoutine(LPVOID lpParam);
+DWORD WINAPI DesaparcarRoutine(LPVOID lpParam);
+
 void AparcarCommit(HCoche hc);
 void PermisoAvance(HCoche hc);
 void PermisoAvanceCommit(HCoche hc);
@@ -81,10 +87,6 @@ int PrimerAjuste(HCoche c);
 int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
 int SiguienteAjuste(HCoche c);
-
-DWORD WINAPI ChoferRoutine(LPVOID lpParam);
-DWORD WINAPI DesaparcarRoutine(LPVOID lpParam);
-int Desaparcar(HCoche hc);
 
 
 
@@ -120,7 +122,7 @@ int main(int argc, char** argv)
 		fprintf(stderr, "AceraAlg[%d] = %d\n", i, Acera[0][i]);
 	}
 
-	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
+	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { Aparcar, Aparcar, Aparcar, Aparcar };
 	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Desaparcar, Desaparcar, Desaparcar, Desaparcar };
 	
 	Funciones.Inicio(FuncionesLlegada, FuncionesSalida, Velocidad, Debug);
@@ -149,68 +151,46 @@ void InitFunctions(){
 	EXIT_IF_NULL(Funciones.Desaparcar = (PARKING_Desaparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_desaparcar"), FUNCTION_LOAD_ERROR);
 }
 
-
 //-------------------------------------------------------------------------------------------------------------------------------------
-int PrimerAjuste(HCoche hc){
 
+int Aparcar(HCoche hc) {
+	int PosAceraAparcar;
 
-	PBOOL AceraAlg = Acera[Funciones.Get[ALGORITMO](hc)];
-	int longitud;
-	int posInicial, longLibre, i = -1;
+	TIPO_FUNCION_LLEGADA Ajuste[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
 
-	longitud = Funciones.Get[LONGITUD](hc);
-	while (i < MAX_LONG_ROAD) {
-		i++;
-		longLibre = 0;
-		while (AceraAlg[i] == FALSE && i < MAX_LONG_ROAD) {
-			i++;
-			longLibre++;
-			if (longLibre == longitud) {
-				posInicial = i - longitud;
-				memset(AceraAlg + posInicial, TRUE, sizeof(BOOL) * longitud);
+	PosAceraAparcar = Ajuste[Funciones.Get[ALGORITMO](hc)](hc);
 
-				PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
-				*PMutexOrden = CreateMutex(NULL, TRUE, NULL);
+	if (-1 != PosAceraAparcar) {
+		PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
+		*PMutexOrden = CreateMutex(NULL, TRUE, NULL);
 
-				PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
-				Datos->MutexOrden = PMutexOrden;
-				Datos->hc = hc;
+		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
+		Datos->MutexOrden = PMutexOrden;
+		Datos->hc = hc;
 
-				HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
-
-				return posInicial;
-			}
-		}
+		HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
 	}
 
-	return -1;
+	return PosAceraAparcar;
 }
 
-int SiguienteAjuste(HCoche hc)
-{
-	return -2;
+int Desaparcar(HCoche hc) {
+	PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
+	Datos->hc = hc;
+
+	HANDLE nuevoThread = CreateThread(NULL, 0, DesaparcarRoutine, Datos, 0, NULL);
+	return 0;
 }
-
-int MejorAjuste(HCoche hc)
-{
-	return -2;
-}
-
-int PeorAjuste(HCoche hc)
-{
-	return -2;
-}
-
-
-
 
 //-------------------------------------------------------------------------------------------------------------------------------------
+
 DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
 
 	HCoche CocheAnterior = SiguienteCoche[Funciones.Get[ALGORITMO](Datos->hc)];
+
 	if (CocheAnterior != 0) {
 
 		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
@@ -224,13 +204,10 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 		fprintf(stderr, "[%d] He entrado en el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
 	}
 
-
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
 
 	return 0;
 }
-
-
 
 DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 {
@@ -240,25 +217,142 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 	return 0;
 }
 
-int Desaparcar(HCoche hc)
-{
-	PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
-	Datos->hc = hc;
+//-------------------------------------------------------------------------------------------------------------------------------------
 
-	HANDLE nuevoThread = CreateThread(NULL, 0, DesaparcarRoutine, Datos, 0, NULL);
-	return 0;
+int PrimerAjuste(HCoche hc) {
+	PBOOL AceraAlg = Acera[PRIMER_AJUSTE];
+	int longitud;
+	int posInicial, longLibre, i = -1;
+
+	longitud = Funciones.Get[LONGITUD](hc);
+	while (i < MAX_LONG_ROAD) {
+		i++;
+		longLibre = 0;
+		while (AceraAlg[i] == FALSE && i < MAX_LONG_ROAD) {
+			i++;
+			longLibre++;
+			if (longLibre == longitud) {
+				posInicial = i - longitud;
+				memset(AceraAlg + posInicial, TRUE, sizeof(BOOL) * longitud);
+				return posInicial;
+			}
+		}
+	}
+
+	return -1;
 }
 
+int SiguienteAjuste(HCoche hc){
+	static int start = -1;
 
+	int posInicial, longLibre;
+	PBOOL AceraAlg = Acera[SIGUIENTE_AJUSTE];
+	int i = start;
+	int contador = -1;
+	int longitud = Funciones.Get[LONGITUD](hc);
+
+	while (AceraAlg[i + 1] == FALSE && i >= 0) i--;
+
+	while (contador <= MAX_LONG_ROAD) {
+		i = (i + 1 < MAX_LONG_ROAD) ? i + 1 : 0;
+		contador++;
+		longLibre = 0;
+		while (AceraAlg[i] == FALSE && contador <= MAX_LONG_ROAD && i < MAX_LONG_ROAD) {
+			i++;
+			contador++;
+			longLibre++;
+			if (longLibre == longitud) {
+				posInicial = i - longitud;
+				memset(AceraAlg + posInicial, TRUE, sizeof(bool)*longitud);
+				start = posInicial - 1;
+
+				return posInicial;
+			}
+		}
+	}
+	return -1;
+}
+
+int MejorAjuste(HCoche hc){
+	int longitud, i, p, f, pa, fa;
+	PBOOL AceraAlg;
+	
+	AceraAlg = Acera[MEJOR_AJUSTE];
+	longitud = Funciones.Get[LONGITUD](hc);
+
+	i = 0;
+	p = f = pa = fa = -1;
+
+	while (i<MAX_LONG_ROAD) {
+		if (AceraAlg[i] == FALSE) {
+			p = i;
+			while (AceraAlg[i] == FALSE && i<MAX_LONG_ROAD) { i++; }
+			f = i - 1;
+
+			if (pa == -1 && (f - p + 1) >= longitud) {
+				pa = p;
+				fa = f;
+			}
+			else if ((f - p + 1) >= longitud && (f - p)<(fa - pa)) {
+				pa = p;
+				fa = f;
+			}
+		}
+		i++;
+	}
+
+
+	if (pa != -1)
+		memset(AceraAlg + pa, TRUE, sizeof(bool)*longitud);
+
+	return pa;
+}
+
+int PeorAjuste(HCoche hc){
+	int longitud, i, p, f, pa, fa;
+	PBOOL AceraAlg;
+
+	AceraAlg = Acera[PEOR_AJUSTE];
+	longitud = Funciones.Get[LONGITUD](hc);
+
+	i = 0;
+	p = f = pa = fa = -1;
+
+	while (i<MAX_LONG_ROAD) {
+		if (AceraAlg[i] == FALSE) {
+			p = i;
+			while (AceraAlg[i] == FALSE && i<MAX_LONG_ROAD) { i++; }
+			f = i - 1;
+
+			if (pa == -1 && (f - p + 1) >= longitud) {
+				pa = p;
+				fa = f;
+			}
+			else if ((f - p + 1) >= longitud && (f - p)>(fa - pa)) {
+				pa = p;
+				fa = f;
+			}
+		}
+		i++;
+	}
+
+
+	if (pa != -1)
+		memset(AceraAlg + pa, TRUE, sizeof(bool)*longitud);
+
+	return pa;
+}
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 void AparcarCommit(HCoche hc) {
-
-
 	SiguienteCoche[Funciones.Get[ALGORITMO](hc)] = hc;
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
 	ReleaseMutex(*DatosCoche->MutexOrden);
 	fprintf(stderr, "[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
 }
-void PermisoAvance(HCoche hc) {}
-void PermisoAvanceCommit(HCoche hc) {}
+void PermisoAvance(HCoche hc) {
+
+}
+void PermisoAvanceCommit(HCoche hc) {
+
+}
