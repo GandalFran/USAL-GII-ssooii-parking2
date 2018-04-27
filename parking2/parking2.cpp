@@ -220,6 +220,7 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 int PrimerAjuste(HCoche hc) {
+
 	PBOOL AceraAlg = Acera[PRIMER_AJUSTE];
 	int longitud;
 	int posInicial, longLibre, i = -1;
@@ -243,6 +244,7 @@ int PrimerAjuste(HCoche hc) {
 }
 
 int SiguienteAjuste(HCoche hc){
+
 	static int start = -1;
 
 	int posInicial, longLibre;
@@ -263,7 +265,7 @@ int SiguienteAjuste(HCoche hc){
 			longLibre++;
 			if (longLibre == longitud) {
 				posInicial = i - longitud;
-				memset(AceraAlg + posInicial, TRUE, sizeof(bool)*longitud);
+				memset(AceraAlg + posInicial, TRUE, sizeof(BOOL)*longitud);
 				start = posInicial - 1;
 
 				return posInicial;
@@ -274,6 +276,7 @@ int SiguienteAjuste(HCoche hc){
 }
 
 int MejorAjuste(HCoche hc){
+
 	int longitud, i, p, f, pa, fa;
 	PBOOL AceraAlg;
 	
@@ -303,12 +306,13 @@ int MejorAjuste(HCoche hc){
 
 
 	if (pa != -1)
-		memset(AceraAlg + pa, TRUE, sizeof(bool)*longitud);
+		memset(AceraAlg + pa, TRUE, sizeof(BOOL)*longitud);
 
 	return pa;
 }
 
 int PeorAjuste(HCoche hc){
+
 	int longitud, i, p, f, pa, fa;
 	PBOOL AceraAlg;
 
@@ -338,7 +342,7 @@ int PeorAjuste(HCoche hc){
 
 
 	if (pa != -1)
-		memset(AceraAlg + pa, TRUE, sizeof(bool)*longitud);
+		memset(AceraAlg + pa, TRUE, sizeof(BOOL)*longitud);
 
 	return pa;
 }
