@@ -1,5 +1,11 @@
-// parking2.cpp: define el punto de entrada de la aplicación de consola.
-//
+/*
+*	@autor: Gabino Luis Lazo (i1028058)
+*	@autor: Francisco Pinto Santos (i0918455)
+*
+*	Segunda prActica SSOO II - PARKING2
+*      http://avellano.usal.es/~ssooii/PARKING/parking2.htm
+*/
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,26 +20,27 @@
 #define DLL_LOAD_ERROR "DLL couldn't be loaded."
 #define FUNCTION_LOAD_ERROR "function couldn't be loaded."
 
+#define WAIT 0
+#define SIGNAL 1
+
 #define MAX_LONG_ROAD 80
+	
 
-#define NUMERO 0
-#define LONGITUD 1
-#define ALGORITMO 2
-#define X 3
-#define X2 4
-#define Y 5
-#define Y2 6
-
-#define PRINT_ERROR(string)	fprintf(stderr, "\n[%d:%s] ERROR: %s", __LINE__, __FUNCTION__,string);	
-
-#define EXIT_IF_NULL(returnValue,errorMsg)      \
-    do{                                         \
-        if((returnValue) == NULL){              \
-            PRINT_ERROR(errorMsg);				\
-            exit(-1);							\
-        }                                       \
+#define EXIT_IF_WRONG_VALUE(ReturnValue,ErrorValue,ErrorMsg)							\
+    do{																					\
+        if((ReturnValue) == (ErrorValue)){												\
+            fprintf(stderr, "\n[%d:%s] ERROR: %s", __LINE__, __FUNCTION__,ErrorMsg);	\
+            exit(-1);																	\
+        }																				\
     }while(0)
 
+
+//--------------- MOVIMIENTOS ---------------------------------------------------------
+#define ESTA_DESAPARCANDO_AVANCE(coche)     (Funciones.GetY(coche)  == 1 && Funciones.GetY2(coche) == 2)
+#define ESTA_DESAPARCANDO_COMMIT(coche)     (Funciones.GetY2(coche) == 1 && Funciones.GetY(coche)  == 2)
+#define ESTA_APARCANDO_AVANCE(coche)        (Funciones.GetY2(coche) == 1 && Funciones.GetY(coche)  == 2)
+#define ESTA_APARCANDO_COMMIT(coche)        (Funciones.GetY(coche)  == 1 && Funciones.GetY2(coche) == 2)
+#define ESTA_EN_CARRETERA(coche)            (Funciones.GetY2(coche) == 2 && Funciones.GetY(coche)  == 2)
 
 
 typedef int(*PARKING_Inicio)(TIPO_FUNCION_LLEGADA *, TIPO_FUNCION_SALIDA *, long, int);
@@ -49,21 +56,27 @@ typedef void*(*PARKING_GetDatos)(HCoche);
 
 typedef HCoche* PHCoche;
 typedef HANDLE CARRETERA, *PCARRETERA;
-//typedef BOOL ACERA, *PACERA;
+typedef BOOL ACERA, *PACERA;
 typedef struct _DatosCoche {
 	HCoche hc;
 	PHANDLE MutexOrden;
 } DATOSCOCHE, *PDATOSCOCHE;
 
-
 HCoche SiguienteCoche[4] = { 0, 0, 0, 0 };
 
 PCARRETERA Carretera[4];
-PBOOL Acera[4];
+PACERA Acera[4];
 
 struct _Funciones{
 	HMODULE WINAPI ParkingLibrary;
-	PARKING_Get Get[7];
+
+	PARKING_Get GetNumero;
+	PARKING_Get GetLongitud;
+	PARKING_Get GetAlgoritmo;
+	PARKING_Get GetX;
+	PARKING_Get GetX2;
+	PARKING_Get GetY;
+	PARKING_Get GetY2;
 	PARKING_GetDatos GetDatos;
 	PARKING_Aparcar Aparcar;
 	PARKING_Desaparcar Desaparcar;
@@ -88,7 +101,7 @@ int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
 int SiguienteAjuste(HCoche c);
 
-
+void SemOp(HANDLE Object, int TypeOp);
 
 
 
@@ -111,16 +124,13 @@ int main(int argc, char** argv)
 	InitFunctions();
 
 	for (int i = PRIMER_AJUSTE; i <= PEOR_AJUSTE; i++) {
-		Acera[i] = (PBOOL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BOOL) * MAX_LONG_ROAD);
+		Acera[i] = (PBOOL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ACERA) * MAX_LONG_ROAD);
 		Carretera[i] = (PCARRETERA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CARRETERA) * MAX_LONG_ROAD);
 		for (int j = 0; j < MAX_LONG_ROAD; j++) {
 			Carretera[i][j] = CreateMutex(NULL, FALSE, NULL);
 		}
 	}
 
-	for (int i = 0; i < MAX_LONG_ROAD; i++) {
-		fprintf(stderr, "AceraAlg[%d] = %d\n", i, Acera[0][i]);
-	}
 
 	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { Aparcar, Aparcar, Aparcar, Aparcar };
 	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Desaparcar, Desaparcar, Desaparcar, Desaparcar };
@@ -132,33 +142,32 @@ int main(int argc, char** argv)
 	return 0;
 }
 void InitFunctions(){
-	EXIT_IF_NULL(Funciones.ParkingLibrary = LoadLibrary(TEXT("parking2.dll")), DLL_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.ParkingLibrary = LoadLibrary(TEXT("parking2.dll")), NULL, DLL_LOAD_ERROR);
 	
-	EXIT_IF_NULL(Funciones.Get[NUMERO] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getNUmero"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Get[LONGITUD] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getLongitud"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Get[ALGORITMO] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getAlgoritmo"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Get[X] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getX"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Get[X2] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getX2"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Get[Y] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getY"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Get[Y2] = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getY2"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetNumero = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getNUmero"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetLongitud = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getLongitud"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetAlgoritmo = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getAlgoritmo"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetX = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getX"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetX2 = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getX2"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetY = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getY"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetY2 = (PARKING_Get)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getY2"), NULL, FUNCTION_LOAD_ERROR);
 
-	EXIT_IF_NULL(Funciones.GetDatos = (PARKING_GetDatos)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getDatos"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.GetDatos = (PARKING_GetDatos)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_getDatos"), NULL, FUNCTION_LOAD_ERROR);
 
-	EXIT_IF_NULL(Funciones.Inicio = (PARKING_Inicio)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_inicio"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Fin = (PARKING_Fin)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_fin"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.Inicio = (PARKING_Inicio)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_inicio"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.Fin = (PARKING_Fin)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_fin"), NULL, FUNCTION_LOAD_ERROR);
 
-	EXIT_IF_NULL(Funciones.Aparcar = (PARKING_Aparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_aparcar"), FUNCTION_LOAD_ERROR);
-	EXIT_IF_NULL(Funciones.Desaparcar = (PARKING_Desaparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_desaparcar"), FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.Aparcar = (PARKING_Aparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_aparcar"), NULL, FUNCTION_LOAD_ERROR);
+	EXIT_IF_WRONG_VALUE(Funciones.Desaparcar = (PARKING_Desaparcar)GetProcAddress(Funciones.ParkingLibrary, "PARKING2_desaparcar"), NULL, FUNCTION_LOAD_ERROR);
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 int Aparcar(HCoche hc) {
+	static TIPO_FUNCION_LLEGADA Ajustes[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
 	int PosAceraAparcar;
 
-	TIPO_FUNCION_LLEGADA Ajuste[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
-
-	PosAceraAparcar = Ajuste[Funciones.Get[ALGORITMO](hc)](hc);
+	PosAceraAparcar = Ajustes[Funciones.GetAlgoritmo(hc)](hc);
 
 	if (-1 != PosAceraAparcar) {
 		PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
@@ -188,20 +197,11 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
-
-	HCoche CocheAnterior = SiguienteCoche[Funciones.Get[ALGORITMO](Datos->hc)];
+	HCoche CocheAnterior = SiguienteCoche[Funciones.GetAlgoritmo(Datos->hc)];
 
 	if (CocheAnterior != 0) {
-
 		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
-
-		fprintf(stderr, "[%d] Espero por el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
-		DWORD WINAPI Value = WaitForSingleObject(*DatosAnterior->MutexOrden, INFINITE);
-		if (Value == WAIT_FAILED) {
-			fprintf(stderr, "[%d]wait failed %d", __LINE__, GetLastError());
-			return 1;
-		}
-		fprintf(stderr, "[%d] He entrado en el mutex de %d que es %d", __LINE__, CocheAnterior, *DatosAnterior->MutexOrden);
+		SemOp(*DatosAnterior->MutexOrden,WAIT);
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
@@ -214,28 +214,69 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
 	Funciones.Desaparcar(Datos->hc, Datos, PermisoAvance, PermisoAvanceCommit);
+
 	return 0;
+}
+
+//-------------------------------------------------------------------------------------------------------------------------------------
+
+void AparcarCommit(HCoche hc) {
+	SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
+	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
+	ReleaseMutex(*DatosCoche->MutexOrden);
+	fprintf(stderr, "\n[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
+}
+void PermisoAvance(HCoche hc) {
+	PCARRETERA CarrAlg = Carretera[Funciones.GetAlgoritmo(hc)];
+
+	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) > 0) {
+		//SemOp(Carretera[Funciones.GetX2(hc)], WAIT);
+	}else if (ESTA_DESAPARCANDO_AVANCE(hc)){
+		for (int i = Funciones.GetX(hc) + Funciones.GetLongitud(hc) - 1; i >= Funciones.GetX(hc); i--) {
+			//SemOp(Carretera[i],WAIT);
+		}
+	}else{
+		return;
+	}
+}
+
+void PermisoAvanceCommit(HCoche hc) {
+	PCARRETERA CarrAlg = Carretera[Funciones.GetAlgoritmo(hc)];
+
+	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) + Funciones.GetLongitud(hc) < MAX_LONG_ROAD){
+		//SemOp(Carretera[Funciones.GetX(hc) + Funciones.GetLongitud(hc)],SIGNAL);
+	}else if (ESTA_DESAPARCANDO_COMMIT(hc)){
+		PACERA AceraAlg = Acera[Funciones.GetAlgoritmo(hc)];
+		memset(AceraAlg + Funciones.GetX(hc), FALSE, sizeof(ACERA)*Funciones.GetLongitud(hc));
+	}else if (ESTA_APARCANDO_COMMIT(hc)){
+		for (int i = Funciones.GetX(hc); i < Funciones.GetX(hc) + Funciones.GetLongitud(hc); i++) {
+			//SemOp(Carretera[i],SIGNAL);
+		}
+	}
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 int PrimerAjuste(HCoche hc) {
 
-	PBOOL AceraAlg = Acera[PRIMER_AJUSTE];
-	int longitud;
-	int posInicial, longLibre, i = -1;
+	PACERA AceraAlg = Acera[PRIMER_AJUSTE];
+	int Longitud;
+	int PosInicial, LongLibre, i;
 
-	longitud = Funciones.Get[LONGITUD](hc);
+	i = -1;
+	AceraAlg = Acera[PRIMER_AJUSTE];
+	Longitud = Funciones.GetLongitud(hc);
+
 	while (i < MAX_LONG_ROAD) {
 		i++;
-		longLibre = 0;
+		LongLibre = 0;
 		while (AceraAlg[i] == FALSE && i < MAX_LONG_ROAD) {
 			i++;
-			longLibre++;
-			if (longLibre == longitud) {
-				posInicial = i - longitud;
-				memset(AceraAlg + posInicial, TRUE, sizeof(BOOL) * longitud);
-				return posInicial;
+			LongLibre++;
+			if (LongLibre == Longitud) {
+				PosInicial = i - Longitud;
+				memset(AceraAlg + PosInicial, TRUE, sizeof(ACERA) * Longitud);
+				return PosInicial;
 			}
 		}
 	}
@@ -244,31 +285,32 @@ int PrimerAjuste(HCoche hc) {
 }
 
 int SiguienteAjuste(HCoche hc){
-
-	static int start = -1;
-
-	int posInicial, longLibre;
-	PBOOL AceraAlg = Acera[SIGUIENTE_AJUSTE];
-	int i = start;
-	int contador = -1;
-	int longitud = Funciones.Get[LONGITUD](hc);
+	return -2;
+	static int Start = -1;
+	int PosInicial, LongLibre, i, Contador, Longitud;
+	PACERA AceraAlg;
+		
+	AceraAlg = Acera[SIGUIENTE_AJUSTE];
+	i = Start;
+	Contador = -1;
+	Longitud = Funciones.GetLongitud(hc);
 
 	while (AceraAlg[i + 1] == FALSE && i >= 0) i--;
 
-	while (contador <= MAX_LONG_ROAD) {
+	while (Contador <= MAX_LONG_ROAD) {
 		i = (i + 1 < MAX_LONG_ROAD) ? i + 1 : 0;
-		contador++;
-		longLibre = 0;
-		while (AceraAlg[i] == FALSE && contador <= MAX_LONG_ROAD && i < MAX_LONG_ROAD) {
+		Contador++;
+		LongLibre = 0;
+		while (AceraAlg[i] == FALSE && Contador <= MAX_LONG_ROAD && i < MAX_LONG_ROAD) {
 			i++;
-			contador++;
-			longLibre++;
-			if (longLibre == longitud) {
-				posInicial = i - longitud;
-				memset(AceraAlg + posInicial, TRUE, sizeof(BOOL)*longitud);
-				start = posInicial - 1;
+			Contador++;
+			LongLibre++;
+			if (LongLibre == Longitud) {
+				PosInicial = i - Longitud;
+				memset(AceraAlg + PosInicial, TRUE, sizeof(BOOL)*Longitud);
+				Start = PosInicial - 1;
 
-				return posInicial;
+				return PosInicial;
 			}
 		}
 	}
@@ -276,87 +318,88 @@ int SiguienteAjuste(HCoche hc){
 }
 
 int MejorAjuste(HCoche hc){
-
-	int longitud, i, p, f, pa, fa;
-	PBOOL AceraAlg;
+	return -2;
+	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
+	PACERA AceraAlg;
 	
 	AceraAlg = Acera[MEJOR_AJUSTE];
-	longitud = Funciones.Get[LONGITUD](hc);
+	Longitud = Funciones.GetLongitud(hc);
 
 	i = 0;
-	p = f = pa = fa = -1;
+	InicioActual = FinActual = InicioAnterior = FinAnterior = -1;
 
 	while (i<MAX_LONG_ROAD) {
 		if (AceraAlg[i] == FALSE) {
-			p = i;
+			InicioActual = i;
 			while (AceraAlg[i] == FALSE && i<MAX_LONG_ROAD) { i++; }
-			f = i - 1;
+			FinActual = i - 1;
 
-			if (pa == -1 && (f - p + 1) >= longitud) {
-				pa = p;
-				fa = f;
+			if (InicioAnterior == -1 && (FinActual - InicioActual + 1) >= Longitud) {
+				InicioAnterior = InicioActual;
+				FinAnterior = FinActual;
 			}
-			else if ((f - p + 1) >= longitud && (f - p)<(fa - pa)) {
-				pa = p;
-				fa = f;
+			else if ((FinActual - InicioActual + 1) >= Longitud && (FinActual - InicioActual)<(FinAnterior - InicioAnterior)) {
+				InicioAnterior = InicioActual;
+				FinAnterior = FinActual;
 			}
 		}
 		i++;
 	}
 
 
-	if (pa != -1)
-		memset(AceraAlg + pa, TRUE, sizeof(BOOL)*longitud);
+	if (InicioAnterior != -1)
+		memset(AceraAlg + InicioAnterior, TRUE, sizeof(BOOL)*Longitud);
 
-	return pa;
+	return InicioAnterior;
 }
 
 int PeorAjuste(HCoche hc){
-
-	int longitud, i, p, f, pa, fa;
-	PBOOL AceraAlg;
+	return -2;
+	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
+	PACERA AceraAlg;
 
 	AceraAlg = Acera[PEOR_AJUSTE];
-	longitud = Funciones.Get[LONGITUD](hc);
+	Longitud = Funciones.GetLongitud(hc);
 
 	i = 0;
-	p = f = pa = fa = -1;
+	InicioActual = FinActual = InicioAnterior = FinAnterior = -1;
 
 	while (i<MAX_LONG_ROAD) {
 		if (AceraAlg[i] == FALSE) {
-			p = i;
+			InicioActual = i;
 			while (AceraAlg[i] == FALSE && i<MAX_LONG_ROAD) { i++; }
-			f = i - 1;
+			FinActual = i - 1;
 
-			if (pa == -1 && (f - p + 1) >= longitud) {
-				pa = p;
-				fa = f;
+			if (InicioAnterior == -1 && (FinActual - InicioActual + 1) >= Longitud) {
+				InicioAnterior = InicioActual;
+				FinAnterior = FinActual;
 			}
-			else if ((f - p + 1) >= longitud && (f - p)>(fa - pa)) {
-				pa = p;
-				fa = f;
+			else if ((FinActual - InicioActual + 1) >= Longitud && (FinActual - InicioActual)>(FinAnterior - InicioAnterior)) {
+				InicioAnterior = InicioActual;
+				FinAnterior = FinActual;
 			}
 		}
 		i++;
 	}
 
 
-	if (pa != -1)
-		memset(AceraAlg + pa, TRUE, sizeof(BOOL)*longitud);
+	if (InicioAnterior != -1)
+		memset(AceraAlg + InicioAnterior, TRUE, sizeof(ACERA)*Longitud);
 
-	return pa;
+	return InicioAnterior;
 }
+
 
 //-------------------------------------------------------------------------------------------------------------------------------------
-void AparcarCommit(HCoche hc) {
-	SiguienteCoche[Funciones.Get[ALGORITMO](hc)] = hc;
-	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	ReleaseMutex(*DatosCoche->MutexOrden);
-	fprintf(stderr, "[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
-}
-void PermisoAvance(HCoche hc) {
 
-}
-void PermisoAvanceCommit(HCoche hc) {
+void SemOp(HANDLE Object, int TypeOp) {
 
+	switch (TypeOp) {
+		case WAIT: 
+			EXIT_IF_WRONG_VALUE(WaitForSingleObject(Object, INFINITE),WAIT_FAILED," ");
+			break;
+		case SIGNAL:
+			//EXIT_IF_WRONG_VALUE(Signal(Object, INFINITE), WAIT_FAILED, " ");
+			break;
+	}
 }
