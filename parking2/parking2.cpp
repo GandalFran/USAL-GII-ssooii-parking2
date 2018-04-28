@@ -139,6 +139,8 @@ int main(int argc, char** argv)
 
 	Sleep(30000);
 
+	Funciones.Fin();
+
 	return 0;
 }
 void InitFunctions(){
