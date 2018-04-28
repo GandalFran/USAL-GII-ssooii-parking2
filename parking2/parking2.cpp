@@ -101,7 +101,7 @@ int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
 int SiguienteAjuste(HCoche c);
 
-void MutexOp(HANDLE Object, int TypeOp);
+//void MutexOp(HANDLE Object, int TypeOp);
 
 
 
@@ -169,12 +169,12 @@ int Aparcar(HCoche hc) {
 
 	PosAceraAparcar = Ajustes[Funciones.GetAlgoritmo(hc)](hc);
 
-	if (-1 != PosAceraAparcar) {
-		PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
-		*PMutexOrden = CreateMutex(NULL, TRUE, NULL);
+	if (-1 != PosAceraAparcar && -2 != PosAceraAparcar) {
+		/*PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
+		*PMutexOrden = CreateMutex(NULL, TRUE, NULL);*/
 
 		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
-		Datos->MutexOrden = PMutexOrden;
+		//Datos->MutexOrden = PMutexOrden;
 		Datos->hc = hc;
 
 		HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
@@ -197,12 +197,12 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
-	HCoche CocheAnterior = SiguienteCoche[Funciones.GetAlgoritmo(Datos->hc)];
+	//HCoche CocheAnterior = SiguienteCoche[Funciones.GetAlgoritmo(Datos->hc)];
 
-	if (CocheAnterior != 0) {
-		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
-		MutexOp(*DatosAnterior->MutexOrden,WAIT);
-	}
+	//if (CocheAnterior != 0) {
+	//	PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
+	//	MutexOp(*DatosAnterior->MutexOrden,WAIT);
+	//}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
 
@@ -221,36 +221,44 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 void AparcarCommit(HCoche hc) {
-	SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
-	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	ReleaseMutex(*DatosCoche->MutexOrden);
-	fprintf(stderr, "\n[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
+	//SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
+	//PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
+	//ReleaseMutex(*DatosCoche->MutexOrden);
+	//fprintf(stderr, "\n[%d]Soy %d y escribo en la variable global y release mi mutex %d", __LINE__, hc, *DatosCoche->MutexOrden);
 }
+
 void PermisoAvance(HCoche hc) {
-	PCARRETERA CarrAlg = Carretera[Funciones.GetAlgoritmo(hc)];
+	PCARRETERA Carr = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) > 0) {
 		//MutexOp(Carretera[Funciones.GetX2(hc)], WAIT);
-	}else if (ESTA_DESAPARCANDO_AVANCE(hc)){
+		WaitForSingleObject(Carr[Funciones.GetX2(hc)], INFINITE);
+	}
+	else if (ESTA_DESAPARCANDO_AVANCE(hc)){
 		for (int i = Funciones.GetX(hc) + Funciones.GetLongitud(hc) - 1; i >= Funciones.GetX(hc); i--) {
 			//MutexOp(Carretera[i],WAIT);
+			WaitForSingleObject(Carr[i], INFINITE);
 		}
-	}else{
+	}
+	else{
 		return;
 	}
 }
 
 void PermisoAvanceCommit(HCoche hc) {
-	PCARRETERA CarrAlg = Carretera[Funciones.GetAlgoritmo(hc)];
+	PCARRETERA Carr = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) + Funciones.GetLongitud(hc) < MAX_LONG_ROAD){
 		//MutexOp(Carretera[Funciones.GetX(hc) + Funciones.GetLongitud(hc)],SIGNAL);
-	}else if (ESTA_DESAPARCANDO_COMMIT(hc)){
+		ReleaseMutex(Carr[Funciones.GetX(hc) + Funciones.GetLongitud(hc)]);
+	}
+	else if (ESTA_DESAPARCANDO_COMMIT(hc)){
 		PACERA AceraAlg = Acera[Funciones.GetAlgoritmo(hc)];
 		memset(AceraAlg + Funciones.GetX(hc), FALSE, sizeof(ACERA)*Funciones.GetLongitud(hc));
-	}else if (ESTA_APARCANDO_COMMIT(hc)){
+	}
+	else if (ESTA_APARCANDO_COMMIT(hc)){
 		for (int i = Funciones.GetX(hc); i < Funciones.GetX(hc) + Funciones.GetLongitud(hc); i++) {
-			//MutexOp(Carretera[i],SIGNAL);
+			ReleaseMutex(Carr[i]);
 		}
 	}
 }
@@ -285,7 +293,7 @@ int PrimerAjuste(HCoche hc) {
 }
 
 int SiguienteAjuste(HCoche hc){
-	return -2;
+	//return -2;
 	static int Start = -1;
 	int PosInicial, LongLibre, i, Contador, Longitud;
 	PACERA AceraAlg;
@@ -318,7 +326,7 @@ int SiguienteAjuste(HCoche hc){
 }
 
 int MejorAjuste(HCoche hc){
-	return -2;
+	//return -2;
 	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
 	PACERA AceraAlg;
 	
@@ -354,7 +362,7 @@ int MejorAjuste(HCoche hc){
 }
 
 int PeorAjuste(HCoche hc){
-	return -2;
+	//return -2;
 	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
 	PACERA AceraAlg;
 
@@ -392,14 +400,14 @@ int PeorAjuste(HCoche hc){
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
-void MutexOp(HANDLE Object, int TypeOp) {
-
-	switch (TypeOp) {
-		case WAIT: 
-			EXIT_IF_WRONG_VALUE(WaitForSingleObject(Object, INFINITE),WAIT_FAILED," ");
-			break;
-		case SIGNAL:
-			//EXIT_IF_WRONG_VALUE(Signal(Object, INFINITE), WAIT_FAILED, " ");
-			break;
-	}
-}
+//void MutexOp(HANDLE Object, int TypeOp) {
+//
+//	switch (TypeOp) {
+//		case WAIT: 
+//			EXIT_IF_WRONG_VALUE(WaitForSingleObject(Object, INFINITE),WAIT_FAILED," ");
+//			break;
+//		case SIGNAL:
+//			//EXIT_IF_WRONG_VALUE(Signal(Object, INFINITE), WAIT_FAILED, " ");
+//			break;
+//	}
+//}
