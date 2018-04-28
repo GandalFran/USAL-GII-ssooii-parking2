@@ -178,6 +178,8 @@ int Aparcar(HCoche hc) {
 		Datos->hc = hc;
 
 		HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
+
+		SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
 	}
 
 	return PosAceraAparcar;
@@ -224,10 +226,8 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 void AparcarCommit(HCoche hc) {
-	SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
 	ReleaseMutex(*DatosCoche->MutexOrden);
-
 }
 
 void PermisoAvance(HCoche hc) {
@@ -296,7 +296,7 @@ int PrimerAjuste(HCoche hc) {
 }
 
 int SiguienteAjuste(HCoche hc){
-	return -2;
+	//return -2;
 	static int Start = -1;
 	int PosInicial, LongLibre, i, Contador, Longitud;
 	PACERA AceraAlg;
@@ -329,7 +329,7 @@ int SiguienteAjuste(HCoche hc){
 }
 
 int MejorAjuste(HCoche hc){
-	return -2;
+	//return -2;
 	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
 	PACERA AceraAlg;
 	
@@ -365,7 +365,7 @@ int MejorAjuste(HCoche hc){
 }
 
 int PeorAjuste(HCoche hc){
-	return -2;
+	//return -2;
 	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
 	PACERA AceraAlg;
 
