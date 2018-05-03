@@ -236,12 +236,10 @@ void PermisoAvance(HCoche hc) {
 	PCARRETERA Carr = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) > 0) {
-		//MutexOp(Carretera[Funciones.GetX2(hc)], WAIT);
 		WaitForSingleObject(Carr[Funciones.GetX2(hc)], INFINITE);
 	}
 	else if (ESTA_DESAPARCANDO_AVANCE(hc)){
 		for (int i = Funciones.GetX(hc) + Funciones.GetLongitud(hc) - 1; i >= Funciones.GetX(hc); i--) {
-			//MutexOp(Carretera[i],WAIT);
 			WaitForSingleObject(Carr[i], INFINITE);
 		}
 	}
@@ -254,7 +252,6 @@ void PermisoAvanceCommit(HCoche hc) {
 	PCARRETERA Carr = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) + Funciones.GetLongitud(hc) < MAX_LONG_ROAD){
-		//MutexOp(Carretera[Funciones.GetX(hc) + Funciones.GetLongitud(hc)],SIGNAL);
 		ReleaseMutex(Carr[Funciones.GetX(hc) + Funciones.GetLongitud(hc)]);
 	}
 	else if (ESTA_DESAPARCANDO_COMMIT(hc)){
@@ -298,7 +295,7 @@ int PrimerAjuste(HCoche hc) {
 }
 
 int SiguienteAjuste(HCoche hc){
-	//return -2;
+
 	static int Start = -1;
 	int PosInicial, LongLibre, i, Contador, Longitud;
 	PACERA AceraAlg;
@@ -331,7 +328,7 @@ int SiguienteAjuste(HCoche hc){
 }
 
 int MejorAjuste(HCoche hc){
-	//return -2;
+
 	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
 	PACERA AceraAlg;
 	
@@ -404,15 +401,3 @@ int PeorAjuste(HCoche hc){
 
 
 //-------------------------------------------------------------------------------------------------------------------------------------
-
-//void MutexOp(HANDLE Object, int TypeOp) {
-//
-//	switch (TypeOp) {
-//		case WAIT: 
-//			EXIT_IF_WRONG_VALUE(WaitForSingleObject(Object, INFINITE),WAIT_FAILED," ");
-//			break;
-//		case SIGNAL:
-//			//EXIT_IF_WRONG_VALUE(Signal(Object, INFINITE), WAIT_FAILED, " ");
-//			break;
-//	}
-//}
