@@ -59,8 +59,8 @@ typedef HANDLE CARRETERA, *PCARRETERA;
 typedef BOOL ACERA, *PACERA;
 typedef struct _DatosCoche {
 	HCoche hc;
-	HANDLE MutexOrdenAnterior;
-	HANDLE MutexOrdenActual;
+	HANDLE EventOrdenAnterior;
+	HANDLE EventOrdenActual;
 } DATOSCOCHE, *PDATOSCOCHE;
 
 HANDLE TurnoCoche[4] = { 0, 0, 0, 0 };
@@ -173,14 +173,14 @@ int Aparcar(HCoche hc) {
 	PosAceraAparcar = Ajustes[Funciones.GetAlgoritmo(hc)](hc);
 
 	if (PosAceraAparcar >= 0) {
-		HANDLE MutexOrden;
-		EXIT_IF_WRONG_VALUE(MutexOrden = CreateMutex(NULL, TRUE, NULL), NULL, "Mutex no creado");
+		HANDLE EventOrden;
+		EXIT_IF_WRONG_VALUE(EventOrden = CreateEvent(NULL, FALSE, FALSE, NULL), NULL, "Evento de orden no creado");
 
 		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
-		Datos->MutexOrdenActual = MutexOrden;
+		Datos->EventOrdenActual = EventOrden;
 		Datos->hc = hc;
-		Datos->MutexOrdenAnterior = TurnoCoche[Funciones.GetAlgoritmo(hc)];
-		TurnoCoche[Funciones.GetAlgoritmo(hc)] = Datos->MutexOrdenActual;
+		Datos->EventOrdenAnterior = TurnoCoche[Funciones.GetAlgoritmo(hc)];
+		TurnoCoche[Funciones.GetAlgoritmo(hc)] = Datos->EventOrdenActual;
 
 		HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
 	}
@@ -202,8 +202,8 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
-	if (Datos->MutexOrdenAnterior != 0) {
-		WaitForSingleObject(Datos->MutexOrdenAnterior, INFINITE);
+	if (Datos->EventOrdenAnterior != 0) {
+		EXIT_IF_WRONG_VALUE(WaitForSingleObject(Datos->EventOrdenAnterior, INFINITE), WAIT_FAILED, "El Wait de orden de salida ha fallado.");
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
@@ -224,7 +224,7 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 
 void AparcarCommit(HCoche hc) {
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	ReleaseMutex(DatosCoche->MutexOrdenActual);
+	int value = PulseEvent(DatosCoche->EventOrdenActual);
 }
 
 void PermisoAvance(HCoche hc) {
