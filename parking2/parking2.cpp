@@ -174,7 +174,7 @@ int Aparcar(HCoche hc) {
 
 	if (PosAceraAparcar >= 0) {
 		HANDLE EventOrden;
-		EXIT_IF_WRONG_VALUE(EventOrden = CreateEvent(NULL, FALSE, FALSE, NULL), NULL, "Evento de orden no creado");
+		EXIT_IF_WRONG_VALUE(EventOrden = CreateEvent(NULL, TRUE, FALSE, NULL), NULL, "Evento de orden no creado");
 
 		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
 		Datos->EventOrdenActual = EventOrden;
@@ -224,7 +224,7 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 
 void AparcarCommit(HCoche hc) {
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	int value = PulseEvent(DatosCoche->EventOrdenActual);
+	SetEvent(DatosCoche->EventOrdenActual);
 }
 
 void PermisoAvance(HCoche hc) {
