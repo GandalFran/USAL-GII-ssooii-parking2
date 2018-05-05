@@ -57,8 +57,11 @@ typedef HANDLE CARRETERA, *PCARRETERA;
 typedef BOOL ACERA, *PACERA;
 typedef struct _DatosCoche {
 	HCoche hc;
+	HANDLE EventOrdenAnterior;
+	HANDLE EventOrdenActual;
 } DATOSCOCHE, *PDATOSCOCHE;
 
+HANDLE TurnoCoche[4] = { 0, 0, 0, 0 };
 
 PCARRETERA Carretera[4];
 PACERA Acera[4];
@@ -167,13 +170,17 @@ int Aparcar(HCoche hc) {
 	PosAceraAparcar = Ajustes[Funciones.GetAlgoritmo(hc)](hc);
 
 	if (PosAceraAparcar >= 0) {
+		HANDLE EventOrden;
+		EXIT_IF_WRONG_VALUE(EventOrden = CreateEvent(NULL, TRUE, FALSE, NULL), NULL, "Evento de orden no creado");
 
 		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
+		Datos->EventOrdenActual = EventOrden;
 		Datos->hc = hc;
+		Datos->EventOrdenAnterior = TurnoCoche[Funciones.GetAlgoritmo(hc)];
+		TurnoCoche[Funciones.GetAlgoritmo(hc)] = Datos->EventOrdenActual;
+
 
 		HANDLE nuevoThread = CreateThread(NULL, 0, AparcarRoutine, Datos, 0, NULL);
-
-		SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
 	}
 
 	return PosAceraAparcar;
@@ -193,6 +200,8 @@ DWORD WINAPI AparcarRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
+	if (Datos->EventOrdenAnterior != 0) {
+		EXIT_IF_WRONG_VALUE(WaitForSingleObject(Datos->EventOrdenAnterior, INFINITE), WAIT_FAILED, "El Wait de orden de salida ha fallado.");
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
@@ -213,7 +222,7 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam){
 void AparcarCommit(HCoche hc) {
 
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	ReleaseMutex(*DatosCoche->MutexOrden);
+	SetEvent(DatosCoche->EventOrdenActual);
 
 }
 
