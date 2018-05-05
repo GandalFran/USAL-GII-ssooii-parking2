@@ -25,7 +25,6 @@
 
 #define MAX_LONG_ROAD 80
 	
-
 #define EXIT_IF_WRONG_VALUE(ReturnValue,ErrorValue,ErrorMsg)							\
     do{																					\
         if((ReturnValue) == (ErrorValue)){												\
@@ -33,7 +32,6 @@
             exit(-1);																	\
         }																				\
     }while(0)
-
 
 //--------------- MOVIMIENTOS ---------------------------------------------------------
 #define ESTA_DESAPARCANDO_AVANCE(coche)     (Funciones.GetY(coche)  == 1 && Funciones.GetY2(coche) == 2)
@@ -89,7 +87,7 @@ void InitFunctions();
 
 int Aparcar(HCoche hc);
 int Desaparcar(HCoche hc);
-DWORD WINAPI ChoferRoutine(LPVOID lpParam);
+DWORD WINAPI AparcarRoutine(LPVOID lpParam);
 DWORD WINAPI DesaparcarRoutine(LPVOID lpParam);
 
 void AparcarCommit(HCoche hc);
@@ -100,8 +98,6 @@ int PrimerAjuste(HCoche c);
 int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
 int SiguienteAjuste(HCoche c);
-
-//void MutexOp(HANDLE Object, int TypeOp);
 
 
 
@@ -143,6 +139,7 @@ int main(int argc, char** argv)
 
 	return 0;
 }
+
 void InitFunctions(){
 	EXIT_IF_WRONG_VALUE(Funciones.ParkingLibrary = LoadLibrary(TEXT("parking2.dll")), NULL, DLL_LOAD_ERROR);
 	
@@ -179,7 +176,7 @@ int Aparcar(HCoche hc) {
 		Datos->MutexOrden = PMutexOrden;
 		Datos->hc = hc;
 
-		HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
+		HANDLE nuevoThread = CreateThread(NULL, 0, AparcarRoutine, Datos, 0, NULL);
 
 		SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
 	}
@@ -197,7 +194,7 @@ int Desaparcar(HCoche hc) {
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
-DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
+DWORD WINAPI AparcarRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
@@ -216,10 +213,9 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 	return 0;
 }
 
-DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
-{
-	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
+DWORD WINAPI DesaparcarRoutine(LPVOID lpParam){
 
+	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 	Funciones.Desaparcar(Datos->hc, Datos, PermisoAvance, PermisoAvanceCommit);
 
 	return 0;
@@ -228,8 +224,10 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 void AparcarCommit(HCoche hc) {
+
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
 	ReleaseMutex(*DatosCoche->MutexOrden);
+
 }
 
 void PermisoAvance(HCoche hc) {
@@ -364,7 +362,7 @@ int MejorAjuste(HCoche hc){
 }
 
 int PeorAjuste(HCoche hc){
-	//return -2;
+	
 	int Longitud, i, InicioActual, FinActual, InicioAnterior, FinAnterior;
 	PACERA AceraAlg;
 
@@ -398,6 +396,3 @@ int PeorAjuste(HCoche hc){
 
 	return InicioAnterior;
 }
-
-
-//-------------------------------------------------------------------------------------------------------------------------------------
