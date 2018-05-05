@@ -59,10 +59,11 @@ typedef HANDLE CARRETERA, *PCARRETERA;
 typedef BOOL ACERA, *PACERA;
 typedef struct _DatosCoche {
 	HCoche hc;
+	HCoche anterior;
 	PHANDLE MutexOrden;
 } DATOSCOCHE, *PDATOSCOCHE;
 
-HCoche SiguienteCoche[4] = { 0, 0, 0, 0 };
+HCoche TurnoCoche[4] = { -1, -1, -1, -1 };
 
 PCARRETERA Carretera[4];
 PACERA Acera[4];
@@ -178,10 +179,10 @@ int Aparcar(HCoche hc) {
 		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
 		Datos->MutexOrden = PMutexOrden;
 		Datos->hc = hc;
+		Datos->anterior = TurnoCoche[Funciones.GetAlgoritmo(hc)];
+		TurnoCoche[Funciones.GetAlgoritmo(hc)] = hc;
 
 		HANDLE nuevoThread = CreateThread(NULL, 0, ChoferRoutine, Datos, 0, NULL);
-
-		SiguienteCoche[Funciones.GetAlgoritmo(hc)] = hc;
 	}
 
 	return PosAceraAparcar;
@@ -201,10 +202,8 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
-	HCoche CocheAnterior = SiguienteCoche[Funciones.GetAlgoritmo(Datos->hc)];
-
-	if (CocheAnterior != 0) {
-		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(CocheAnterior);
+	if (Datos->anterior != -1) {
+		PDATOSCOCHE DatosAnterior = (PDATOSCOCHE)Funciones.GetDatos(Datos->anterior);
 
 		if (DatosAnterior != NULL) {
 			WaitForSingleObject(*DatosAnterior->MutexOrden, INFINITE);
