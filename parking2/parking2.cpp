@@ -59,11 +59,11 @@ typedef HANDLE CARRETERA, *PCARRETERA;
 typedef BOOL ACERA, *PACERA;
 typedef struct _DatosCoche {
 	HCoche hc;
-	PHANDLE MutexOrdenAnterior;
-	PHANDLE MutexOrdenActual;
+	HANDLE MutexOrdenAnterior;
+	HANDLE MutexOrdenActual;
 } DATOSCOCHE, *PDATOSCOCHE;
 
-PHANDLE TurnoCoche[4] = { 0, 0, 0, 0 };
+HANDLE TurnoCoche[4] = { 0, 0, 0, 0 };
 
 PCARRETERA Carretera[4];
 PACERA Acera[4];
@@ -173,11 +173,11 @@ int Aparcar(HCoche hc) {
 	PosAceraAparcar = Ajustes[Funciones.GetAlgoritmo(hc)](hc);
 
 	if (PosAceraAparcar >= 0) {
-		PHANDLE PMutexOrden = (PHANDLE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HANDLE));
-		EXIT_IF_WRONG_VALUE(*PMutexOrden = CreateMutex(NULL, TRUE, NULL), NULL, "Mutex no creado");
+		HANDLE MutexOrden;
+		EXIT_IF_WRONG_VALUE(MutexOrden = CreateMutex(NULL, TRUE, NULL), NULL, "Mutex no creado");
 
 		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
-		Datos->MutexOrdenActual = PMutexOrden;
+		Datos->MutexOrdenActual = MutexOrden;
 		Datos->hc = hc;
 		Datos->MutexOrdenAnterior = TurnoCoche[Funciones.GetAlgoritmo(hc)];
 		TurnoCoche[Funciones.GetAlgoritmo(hc)] = Datos->MutexOrdenActual;
@@ -203,7 +203,7 @@ DWORD WINAPI ChoferRoutine(LPVOID lpParam) {
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
 	if (Datos->MutexOrdenAnterior != 0) {
-		WaitForSingleObject(*Datos->MutexOrdenAnterior, INFINITE);
+		WaitForSingleObject(Datos->MutexOrdenAnterior, INFINITE);
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
@@ -224,7 +224,7 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam)
 
 void AparcarCommit(HCoche hc) {
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	ReleaseMutex(*DatosCoche->MutexOrdenActual);
+	ReleaseMutex(DatosCoche->MutexOrdenActual);
 }
 
 void PermisoAvance(HCoche hc) {
