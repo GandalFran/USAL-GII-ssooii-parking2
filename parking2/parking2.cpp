@@ -19,9 +19,9 @@
 #define USAGE_ERROR_MSG "Usage: parking.exe <velocidad> [D]"
 #define DLL_LOAD_ERROR "DLL couldn't be loaded."
 #define FUNCTION_LOAD_ERROR "function couldn't be loaded."
-
-#define WAIT 0
-#define SIGNAL 1
+#define THREAD_CREATION_ERROR "The threath couldn't be created."
+#define IPC_CREATION_ERROR "The IPC couldn't be created."
+#define OP_FAILED "A internal operation failed."
 
 #define MAX_LONG_ROAD 80
 	
@@ -29,7 +29,7 @@
     do{																					\
         if((ReturnValue) == (ErrorValue)){												\
             fprintf(stderr, "\n[%d:%s] ERROR: %s", __LINE__, __FUNCTION__,ErrorMsg);	\
-            exit(-1);																	\
+            exit(EXIT_FAILURE);																	\
         }																				\
     }while(0)
 
@@ -121,10 +121,10 @@ int main(int argc, char** argv)
 	InitFunctions();
 
 	for (int i = PRIMER_AJUSTE; i <= PEOR_AJUSTE; i++) {
-		Acera[i] = (PBOOL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ACERA) * MAX_LONG_ROAD);
-		Carretera[i] = (PCARRETERA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CARRETERA) * MAX_LONG_ROAD);
+		EXIT_IF_WRONG_VALUE(Acera[i] = (PBOOL)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ACERA) * MAX_LONG_ROAD), NULL, OP_FAILED);
+		EXIT_IF_WRONG_VALUE(Carretera[i] = (PCARRETERA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CARRETERA) * MAX_LONG_ROAD), NULL, OP_FAILED);
 		for (int j = 0; j < MAX_LONG_ROAD; j++) {
-			Carretera[i][j] = CreateMutex(NULL, FALSE, NULL);
+			EXIT_IF_WRONG_VALUE(Carretera[i][j] = CreateMutex(NULL, FALSE, NULL),NULL,IPC_CREATION_ERROR);
 		}
 	}
 
@@ -165,32 +165,34 @@ void InitFunctions(){
 
 int Aparcar(HCoche hc) {
 	static TIPO_FUNCION_LLEGADA Ajustes[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
+	PDATOSCOCHE Datos;
 	int PosAceraAparcar;
 
 	PosAceraAparcar = Ajustes[Funciones.GetAlgoritmo(hc)](hc);
 
 	if (PosAceraAparcar >= 0) {
 		HANDLE EventOrden;
-		EXIT_IF_WRONG_VALUE(EventOrden = CreateEvent(NULL, TRUE, FALSE, NULL), NULL, "Evento de orden no creado");
+		EXIT_IF_WRONG_VALUE(EventOrden = CreateEvent(NULL, TRUE, FALSE, NULL), NULL, IPC_CREATION_ERROR);
+		EXIT_IF_WRONG_VALUE(Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE)), NULL, OP_FAILED);
 
-		PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
 		Datos->EventOrdenActual = EventOrden;
 		Datos->hc = hc;
 		Datos->EventOrdenAnterior = TurnoCoche[Funciones.GetAlgoritmo(hc)];
 		TurnoCoche[Funciones.GetAlgoritmo(hc)] = Datos->EventOrdenActual;
 
-
-		HANDLE nuevoThread = CreateThread(NULL, 0, AparcarRoutine, Datos, 0, NULL);
+		EXIT_IF_WRONG_VALUE(CreateThread(NULL, 0, AparcarRoutine, Datos, 0, NULL),NULL,THREAD_CREATION_ERROR);
 	}
 
 	return PosAceraAparcar;
 }
 
 int Desaparcar(HCoche hc) {
-	PDATOSCOCHE Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE));
+	PDATOSCOCHE Datos;
+
+	EXIT_IF_WRONG_VALUE(Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE)), NULL, OP_FAILED);
 	Datos->hc = hc;
 
-	HANDLE nuevoThread = CreateThread(NULL, 0, DesaparcarRoutine, Datos, 0, NULL);
+	EXIT_IF_WRONG_VALUE(CreateThread(NULL, 0, DesaparcarRoutine, Datos, FALSE, NULL), NULL, THREAD_CREATION_ERROR);
 	return 0;
 }
 
@@ -201,10 +203,12 @@ DWORD WINAPI AparcarRoutine(LPVOID lpParam) {
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 
 	if (Datos->EventOrdenAnterior != 0) {
-		EXIT_IF_WRONG_VALUE(WaitForSingleObject(Datos->EventOrdenAnterior, INFINITE), WAIT_FAILED, "El Wait de orden de salida ha fallado.");
+		EXIT_IF_WRONG_VALUE(WaitForSingleObject(Datos->EventOrdenAnterior, INFINITE), WAIT_FAILED, OP_FAILED);
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
+
+	EXIT_IF_WRONG_VALUE(HeapFree(GetProcessHeap(), 0, Datos), FALSE, OP_FAILED);
 
 	return 0;
 }
@@ -213,6 +217,8 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam){
 
 	PDATOSCOCHE Datos = (PDATOSCOCHE)lpParam;
 	Funciones.Desaparcar(Datos->hc, Datos, PermisoAvance, PermisoAvanceCommit);
+
+	EXIT_IF_WRONG_VALUE(HeapFree(GetProcessHeap(), 0, Datos), FALSE, OP_FAILED);
 
 	return 0;
 }
@@ -230,11 +236,11 @@ void PermisoAvance(HCoche hc) {
 	PCARRETERA Carr = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) > 0) {
-		WaitForSingleObject(Carr[Funciones.GetX2(hc)], INFINITE);
+		EXIT_IF_WRONG_VALUE(WaitForSingleObject(Carr[Funciones.GetX2(hc)], INFINITE),WAIT_FAILED,OP_FAILED);
 	}
 	else if (ESTA_DESAPARCANDO_AVANCE(hc)){
 		for (int i = Funciones.GetX(hc) + Funciones.GetLongitud(hc) - 1; i >= Funciones.GetX(hc); i--) {
-			WaitForSingleObject(Carr[i], INFINITE);
+			EXIT_IF_WRONG_VALUE(WaitForSingleObject(Carr[i], INFINITE), WAIT_FAILED, OP_FAILED);
 		}
 	}
 	else{
@@ -246,7 +252,7 @@ void PermisoAvanceCommit(HCoche hc) {
 	PCARRETERA Carr = Carretera[Funciones.GetAlgoritmo(hc)];
 
 	if (ESTA_EN_CARRETERA(hc) && Funciones.GetX(hc) + Funciones.GetLongitud(hc) < MAX_LONG_ROAD){
-		ReleaseMutex(Carr[Funciones.GetX(hc) + Funciones.GetLongitud(hc)]);
+		EXIT_IF_WRONG_VALUE(ReleaseMutex(Carr[Funciones.GetX(hc) + Funciones.GetLongitud(hc)]),0,OP_FAILED);
 	}
 	else if (ESTA_DESAPARCANDO_COMMIT(hc)){
 		PACERA AceraAlg = Acera[Funciones.GetAlgoritmo(hc)];
@@ -254,7 +260,7 @@ void PermisoAvanceCommit(HCoche hc) {
 	}
 	else if (ESTA_APARCANDO_COMMIT(hc)){
 		for (int i = Funciones.GetX(hc); i < Funciones.GetX(hc) + Funciones.GetLongitud(hc); i++) {
-			ReleaseMutex(Carr[i]);
+			EXIT_IF_WRONG_VALUE(ReleaseMutex(Carr[i]), 0, OP_FAILED);
 		}
 	}
 }
