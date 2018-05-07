@@ -204,6 +204,7 @@ DWORD WINAPI AparcarRoutine(LPVOID lpParam) {
 
 	if (Datos->EventOrdenAnterior != 0) {
 		EXIT_IF_WRONG_VALUE(WaitForSingleObject(Datos->EventOrdenAnterior, INFINITE), WAIT_FAILED, OP_FAILED);
+		EXIT_IF_WRONG_VALUE(CloseHandle(Datos->EventOrdenAnterior), 0, OP_FAILED);
 	}
 
 	Funciones.Aparcar(Datos->hc, Datos, AparcarCommit, PermisoAvance, PermisoAvanceCommit);
