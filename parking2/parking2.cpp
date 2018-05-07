@@ -86,8 +86,8 @@ struct _Funciones{
 
 void InitFunctions();
 
-int Aparcar(HCoche hc);
-int Desaparcar(HCoche hc);
+int Llegada(HCoche hc);
+int Salida(HCoche hc);
 DWORD WINAPI AparcarRoutine(LPVOID lpParam);
 DWORD WINAPI DesaparcarRoutine(LPVOID lpParam);
 
@@ -129,8 +129,8 @@ int main(int argc, char** argv)
 	}
 
 
-	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { Aparcar, Aparcar, Aparcar, Aparcar };
-	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Desaparcar, Desaparcar, Desaparcar, Desaparcar };
+	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { Llegada, Llegada, Llegada, Llegada };
+	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Salida, Salida, Salida, Salida };
 	
 	Funciones.Inicio(FuncionesLlegada, FuncionesSalida, Velocidad, Debug);
 
@@ -163,7 +163,7 @@ void InitFunctions(){
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
-int Aparcar(HCoche hc) {
+int Llegada(HCoche hc) {
 	static TIPO_FUNCION_LLEGADA Ajustes[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
 	PDATOSCOCHE Datos;
 	int PosAceraAparcar;
@@ -186,7 +186,7 @@ int Aparcar(HCoche hc) {
 	return PosAceraAparcar;
 }
 
-int Desaparcar(HCoche hc) {
+int Salida(HCoche hc) {
 	PDATOSCOCHE Datos;
 
 	EXIT_IF_WRONG_VALUE(Datos = (PDATOSCOCHE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DATOSCOCHE)), NULL, OP_FAILED);
