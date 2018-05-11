@@ -6,49 +6,39 @@
 *      http://avellano.usal.es/~ssooii/PARKING/parking2.htm
 */
 
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <tchar.h>
 #include <Windows.h>
-
-#define PARKING2_IMPORTS
-
 #include "parking2.h"
 
 #define USAGE_ERROR_MSG "Usage: parking.exe <velocidad> [D]"
 #define DLL_LOAD_ERROR "DLL couldn't be loaded."
-#define FUNCTION_LOAD_ERROR "function couldn't be loaded."
-#define THREAD_CREATION_ERROR "The threath couldn't be created."
+#define FUNCTION_LOAD_ERROR "Function couldn't be loaded."
+#define THREAD_CREATION_ERROR "The thread couldn't be created."
 #define IPC_CREATION_ERROR "The IPC couldn't be created."
 #define OP_FAILED "A internal operation failed."
-
 #define MAX_LONG_ROAD 80
-	
+
 #define EXIT_IF_WRONG_VALUE(ReturnValue,ErrorValue,ErrorMsg)							\
     do{																					\
         if((ReturnValue) == (ErrorValue)){												\
             fprintf(stderr, "\n[%d:%s] ERROR: %s", __LINE__, __FUNCTION__,ErrorMsg);	\
-            exit(EXIT_FAILURE);																	\
+            exit(EXIT_FAILURE);															\
         }																				\
     }while(0)
 
-//--------------- MOVIMIENTOS ---------------------------------------------------------
 #define ESTA_DESAPARCANDO_AVANCE(coche)     (Funciones.GetY(coche)  == 1 && Funciones.GetY2(coche) == 2)
 #define ESTA_DESAPARCANDO_COMMIT(coche)     (Funciones.GetY2(coche) == 1 && Funciones.GetY(coche)  == 2)
 #define ESTA_APARCANDO_AVANCE(coche)        (Funciones.GetY2(coche) == 1 && Funciones.GetY(coche)  == 2)
 #define ESTA_APARCANDO_COMMIT(coche)        (Funciones.GetY(coche)  == 1 && Funciones.GetY2(coche) == 2)
 #define ESTA_EN_CARRETERA(coche)            (Funciones.GetY2(coche) == 2 && Funciones.GetY(coche)  == 2)
 
+//-------------------------------------------------------------------------------------------------------------------------------------
 
 typedef int(*PARKING_Inicio)(TIPO_FUNCION_LLEGADA *, TIPO_FUNCION_SALIDA *, long, int);
 typedef int(*PARKING_Fin)(void);
-typedef int(*PARKING_Aparcar)(HCoche, void *datos, TIPO_FUNCION_APARCAR_COMMIT,
-												   TIPO_FUNCION_PERMISO_AVANCE,
-												   TIPO_FUNCION_PERMISO_AVANCE_COMMIT);
-typedef int (*PARKING_Desaparcar)(HCoche, void *datos,
-										  TIPO_FUNCION_PERMISO_AVANCE,
-										  TIPO_FUNCION_PERMISO_AVANCE_COMMIT);
+typedef int(*PARKING_Aparcar)(HCoche, void *datos, TIPO_FUNCION_APARCAR_COMMIT, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT);
+typedef int (*PARKING_Desaparcar)(HCoche, void *datos, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT);
 typedef int(*PARKING_Get)(HCoche);
 typedef void*(*PARKING_GetDatos)(HCoche);
 
@@ -61,12 +51,12 @@ typedef struct _DatosCoche {
 	HANDLE EventOrdenActual;
 } DATOSCOCHE, *PDATOSCOCHE;
 
-HANDLE TurnoCoche[4] = { 0, 0, 0, 0 };
+//-------------------------------------------------------------------------------------------------------------------------------------
 
 PCARRETERA Carretera[4];
 PACERA Acera[4];
 
-struct _Funciones{
+struct{
 	HMODULE WINAPI ParkingLibrary;
 
 	PARKING_Get GetNumero;
@@ -83,6 +73,7 @@ struct _Funciones{
 	PARKING_Fin Fin;
 }Funciones;
 
+//-------------------------------------------------------------------------------------------------------------------------------------
 
 void InitFunctions();
 
@@ -100,7 +91,7 @@ int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
 int SiguienteAjuste(HCoche c);
 
-
+//-------------------------------------------------------------------------------------------------------------------------------------
 
 int main(int argc, char** argv)
 {
@@ -127,7 +118,6 @@ int main(int argc, char** argv)
 			EXIT_IF_WRONG_VALUE(Carretera[i][j] = CreateMutex(NULL, FALSE, NULL),NULL,IPC_CREATION_ERROR);
 		}
 	}
-
 
 	TIPO_FUNCION_LLEGADA FuncionesLlegada[] = { Llegada, Llegada, Llegada, Llegada };
 	TIPO_FUNCION_SALIDA FuncionesSalida[] = { Salida, Salida, Salida, Salida };
@@ -165,6 +155,8 @@ void InitFunctions(){
 
 int Llegada(HCoche hc) {
 	static TIPO_FUNCION_LLEGADA Ajustes[] = { PrimerAjuste, SiguienteAjuste, MejorAjuste, PeorAjuste };
+	static HANDLE TurnoCoche[4] = { 0, 0, 0, 0 };
+
 	PDATOSCOCHE Datos;
 	int PosAceraAparcar;
 
@@ -357,7 +349,6 @@ int MejorAjuste(HCoche hc){
 		i++;
 	}
 
-
 	if (InicioAnterior != -1)
 		memset(AceraAlg + InicioAnterior, TRUE, sizeof(BOOL)*Longitud);
 
@@ -392,7 +383,6 @@ int PeorAjuste(HCoche hc){
 		}
 		i++;
 	}
-
 
 	if (InicioAnterior != -1)
 		memset(AceraAlg + InicioAnterior, TRUE, sizeof(ACERA)*Longitud);
