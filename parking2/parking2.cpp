@@ -43,8 +43,13 @@ typedef int(*PARKING_Get)(HCoche);
 typedef void*(*PARKING_GetDatos)(HCoche);
 
 typedef HCoche* PHCoche;
-typedef HANDLE CARRETERA, *PCARRETERA;
+typedef HANDLE CARRETERA, *PCARRETERA;	
 typedef BOOL ACERA, *PACERA;
+
+//	Estructura principal que guarda cada coche:
+//		hc: Es el manejador opaco del coche de la dll.
+//		EventOrdenAnterior: es el handle del evento del coche anterior, se espera sobre el antes de salir para asegurar el orden.
+//		EventOrdenActual: es el handle de nuestro evento que mantenemos no señalado 
 typedef struct _DatosCoche {
 	HCoche hc;
 	HANDLE EventOrdenAnterior;
@@ -53,9 +58,19 @@ typedef struct _DatosCoche {
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
+//	La carretera esta representada como Handles de Mutexes.
+//		- Los mutex con propietario significa que esa casilla de carretera esta ocupada/reservada por un coche.
+//		- Los mutex señalados significa que estan libres
 PCARRETERA Carretera[4];
+
+//	La acera de aparcamiento esta representada como un array booleano
+//		- TRUE = Acera con coche aparcado.
+//		- False = Acera libre.
+//
+//	Usado para el calculo de las posiciones de aparcamiento en la acera.
 PACERA Acera[4];
 
+//	Estructura global donde se guardan los punteros a funcion de la DLL.
 struct{
 	HMODULE WINAPI ParkingLibrary;
 
@@ -75,17 +90,30 @@ struct{
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
+//	Procedimiento para cargar las funciones de la dll y guardarlas en la estructura global de funciones.
 void InitFunctions();
 
+//	Funciones de callback con la bibliteca.
+//		- LLegada: buscara una posicion en la acera y si la encuentra crea un hilo para aparcar el coche en AparcarRoutine().
+//		- Salida: crea un hilo para desaparcar un coche en DesaparcarRoutine().
 int Llegada(HCoche hc);
 int Salida(HCoche hc);
+
+//	Funciones de los hilos de los choferes. En AparcarRoutine() se espera por el evento del coche anterior para salir en orden.
+//	En ellas se llaman a la funcion de la dll PARKING2_aparcar() o PARKING2_desaparcar().
 DWORD WINAPI AparcarRoutine(LPVOID lpParam);
 DWORD WINAPI DesaparcarRoutine(LPVOID lpParam);
 
+//	Funciones de callback de la biblioteca cuando hace movimientos en los coches.
+//		AparcarCommit(): Se activa el evento para que el coche siguiente pueda salir si esta esperando por nosotros.
+//		PermisoAvace(): Se hace wait sobre los mutexes de la carretera que tenemos previsto ocupar. De derecha a izquierda
+//						porque el trafico va en esa direccion para evitar interbloqueos.
+//		PermisoAvaceCommit(): Se hacen signal sobre los mutexes que acabamos de dejar libres.
 void AparcarCommit(HCoche hc);
 void PermisoAvance(HCoche hc);
 void PermisoAvanceCommit(HCoche hc);
 
+//	Algoritmos de calculo de la posicion a aparcar en la acera.
 int PrimerAjuste(HCoche c);
 int MejorAjuste(HCoche c);
 int PeorAjuste(HCoche c);
@@ -221,7 +249,7 @@ DWORD WINAPI DesaparcarRoutine(LPVOID lpParam){
 void AparcarCommit(HCoche hc) {
 
 	PDATOSCOCHE DatosCoche = (PDATOSCOCHE)Funciones.GetDatos(hc);
-	SetEvent(DatosCoche->EventOrdenActual);
+	EXIT_IF_WRONG_VALUE(SetEvent(DatosCoche->EventOrdenActual), 0, OP_FAILED);
 
 }
 
@@ -236,9 +264,7 @@ void PermisoAvance(HCoche hc) {
 			EXIT_IF_WRONG_VALUE(WaitForSingleObject(Carr[i], INFINITE), WAIT_FAILED, OP_FAILED);
 		}
 	}
-	else{
-		return;
-	}
+
 }
 
 void PermisoAvanceCommit(HCoche hc) {
