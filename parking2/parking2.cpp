@@ -65,7 +65,7 @@ PCARRETERA Carretera[4];
 
 //	La acera de aparcamiento esta representada como un array booleano
 //		- TRUE = Acera con coche aparcado.
-//		- False = Acera libre.
+//		- FALSE = Acera libre.
 //
 //	Usado para el calculo de las posiciones de aparcamiento en la acera.
 PACERA Acera[4];
